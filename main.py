@@ -251,8 +251,8 @@ def main(source_repo_path, tracking_repo_path, check_interval=1800):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Monitor Git repository changes and track them using AWS Bedrock")
-    parser.add_argument("--source", required=True, help="/home/vidhu-p/Desktop/coding/git-tracker")
-    parser.add_argument("--tracking", required=True, help="/home/vidhu-p/Desktop/coding/git-tracker/tracking_repo")
+    parser.add_argument("--source", required=True, help="Path to the source repository")
+    parser.add_argument("--tracking", required=True, help="Path to the tracking repository")
     parser.add_argument("--interval", type=int, default=1800, help="Check interval in seconds (default: 1800 = 30 minutes)")
     
     args = parser.parse_args()
