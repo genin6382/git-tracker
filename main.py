@@ -37,6 +37,9 @@ def initialize_repository(tracking_repo_path):
         # Stage and commit
         repo.index.add(['README.md'])
         repo.index.commit("Initial commit")
+
+        #push to remote 
+        repo.git.push('origin', 'master')
         
         logger.info(f"Successfully initialized Git repo at {tracking_repo_path}")
         return repo
@@ -47,22 +50,19 @@ def initialize_repository(tracking_repo_path):
 
 def get_uncommitted_changes(repo_path):
     try:
-        # Open the repository
         repo = Repo(repo_path)
-        
         # Check if the directory is a valid git repository
         if not repo.bare:
             logger.info(f"Successfully opened repository at {os.path.abspath(repo_path)}")
         else:
             return {"error": "The repository is bare and has no working tree."}
-            
         # Dictionary to store the changes
         changes = {
             "modified": {},
             "untracked": [],
             "deleted": []
         }
-        
+
         # Get the diff between working directory and HEAD
         diff = repo.git.diff(None)
         if diff:
@@ -77,7 +77,7 @@ def get_uncommitted_changes(repo_path):
                 changes["deleted"].append(file_path)
                 continue
                 
-            # Get the actual content changes for modified files
+            # Get the content changes for modified files
             try:
                 file_diff = repo.git.diff(None, file_path)
                 changes["modified"][file_path] = file_diff
@@ -143,11 +143,11 @@ def summarize_changes_using_bedrock(changes):
                 modelId=primary_model,
                 body=json.dumps({
                     "anthropic_version": "bedrock-2023-05-31",
-                    "max_tokens": 60,
+                    "max_tokens": 100,
                     "temperature": 0.3,
                     "top_p": 0.9,
                     "top_k": 30,
-                    "system": "You are a helpful assistant that summarizes code and file changes clearly and concisely. When given a diff or list of changed files, generate a short summary suitable for a changelog or commit message. Avoid overly technical jargon. Keep it clear and human-readable.",
+                    "system": "You are a technical assistant. Provide ONLY the summary of git changes in bullet points. DO NOT include headers, timestamps, or introductory phrases.",
                     "messages": [
                         {
                             "role": "user",
@@ -171,19 +171,42 @@ def summarize_changes_using_bedrock(changes):
 
 def save_summary_to_tracking_repo(tracking_repo, summary, source_repo_path):
     try:
-        timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        summary_file = f"change_summary_{timestamp}.md"
+        now = datetime.datetime.now()
+        readable_date = now.strftime("%B %d, %Y at %I:%M %p") 
+        file_timestamp = now.strftime("%Y-%m-%d_%H-%M-%S")  
+        
+        # Extract the first line of the summary for the commit message
+        summary_lines = summary.strip().split('\n')
+        first_change = summary_lines[0] if summary_lines else "No specific changes"
+    
+        commit_message = f"Update: {first_change} - {readable_date}"
+        
+        # Limit commit message length to avoid git issues
+        if len(commit_message) > 100:
+            commit_message = commit_message[:97] + "..."
+            
+        # Create the summary file
+        summary_file = f"change_summary_{file_timestamp}.md"
         summary_path = os.path.join(tracking_repo.working_dir, summary_file)
         
-        # Create the summary file
+        # Write to the summary file with more readable date format
         with open(summary_path, 'w') as f:
-            f.write(f"# Change Summary - {timestamp}\n\n")
+            f.write(f"# Change Summary - {readable_date}\n\n")
             f.write(f"Source Repository: {os.path.abspath(source_repo_path)}\n\n")
             f.write(summary)
         
-        # Add and commit the summary file
         tracking_repo.git.add(summary_file)
-        tracking_repo.git.commit('-m', f'Add change summary for {timestamp}')
+        tracking_repo.git.commit('-m', commit_message)
+        
+        # Push to GitHub if remote is configured (optional)
+        try:
+            remotes = [remote.name for remote in tracking_repo.remotes]
+            if 'origin' in remotes:
+                logger.info("Pushing changes to GitHub...")
+                tracking_repo.git.push('origin', 'master')
+                logger.info("Successfully pushed to GitHub")
+        except Exception as e:
+            logger.error(f"Error pushing to GitHub: {e}")
         
         logger.info(f"Committed change summary to tracking repository: {summary_file}")
     
