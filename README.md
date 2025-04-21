@@ -14,7 +14,7 @@ This creates a skewed view of developer activity:
 
 > ⚠️ The chart below is an example of **frequent but unplanned commits**, giving the illusion of productivity:
 
-![Unplanned Commit Activity](d747d615-01a2-4414-9801-41804922a06a.png)
+![Unplanned Commit Activity](unplanned-commit-activity.png)
 
 ---
 
