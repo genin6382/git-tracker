@@ -1,4 +1,3 @@
-
 import os
 from git import Repo
 from transformers import pipeline
@@ -71,25 +70,182 @@ def get_uncommitted_changes(repo_path):
     except Exception as e:
         return {"error": str(e)}
 
-def display_changes(changes):
+def huggingface_summarize(text, min_length=30, max_length=150, min_input_length=100):
     """
-    Display the changes in a readable format
+    Summarize text using Hugging Face transformers
+    
+    Args:
+        text (str): Input text to summarize
+        min_length (int): Minimum length of summary
+        max_length (int): Maximum length of summary
+        min_input_length (int): Minimum length of text to summarize
+        
+    Returns:
+        str: Summarized text
+    """
+    # Skip summarization for short texts
+    if len(text) < min_input_length:
+        return text
+    
+    try:
+        # Initialize the summarization pipeline (downloads model on first run)
+        # Using facebook/bart-large-cnn, one of the best general-purpose summarization models
+        summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
+        
+        # Handle long texts by chunking if necessary
+        max_token_length = 1024  # BART model token limit
+        
+        if len(text) > max_token_length * 4:  # If text is very long
+            chunks = split_text_into_chunks(text, max_token_length)
+            summaries = []
+            
+            for chunk in chunks:
+                if len(chunk) < min_input_length:
+                    continue
+                    
+                chunk_summary = summarizer(chunk, 
+                                          max_length=max_length // len(chunks), 
+                                          min_length=min_length // len(chunks), 
+                                          do_sample=False)[0]['summary_text']
+                summaries.append(chunk_summary)
+                
+            return " ".join(summaries)
+        else:
+            # Standard summarization for texts within token limits
+            summary = summarizer(text, 
+                                max_length=max_length, 
+                                min_length=min_length, 
+                                do_sample=False)[0]['summary_text']
+            return summary
+            
+    except Exception as e:
+        print(f"Hugging Face summarization error: {e}")
+        # Fall back to returning original text if summarization fails
+        return text
+
+def split_text_into_chunks(text, max_length):
+    """
+    Split text into chunks of approximately max_length characters
+    Try to split at paragraph breaks when possible
+    
+    Args:
+        text (str): Text to split
+        max_length (int): Approximate maximum length of each chunk
+        
+    Returns:
+        list: List of text chunks
+    """
+    # Try to split by paragraphs first
+    paragraphs = text.split('\n\n')
+    chunks = []
+    current_chunk = ""
+    
+    for paragraph in paragraphs:
+        # If adding this paragraph exceeds max_length, start a new chunk
+        if len(current_chunk) + len(paragraph) > max_length and current_chunk:
+            chunks.append(current_chunk)
+            current_chunk = paragraph
+        else:
+            if current_chunk:
+                current_chunk += "\n\n" + paragraph
+            else:
+                current_chunk = paragraph
+    
+    # Add the last chunk if it's not empty
+    if current_chunk:
+        chunks.append(current_chunk)
+    
+    # If we still have no chunks (e.g., no paragraph breaks), 
+    # fall back to splitting by sentences or just by length
+    if not chunks:
+        chunks = [text[i:i+max_length] for i in range(0, len(text), max_length)]
+    
+    return chunks
+
+def is_code_file(file_path):
+    """
+    Determine if a file is likely to be a code file based on extension
+    
+    Args:
+        file_path (str): Path to the file
+        
+    Returns:
+        bool: True if the file is a code file, False otherwise
+    """
+    code_extensions = [
+        '.py', '.js', '.java', '.c', '.cpp', '.h', '.cs', '.php', '.rb', 
+        '.go', '.swift', '.kt', '.ts', '.html', '.css', '.sql', '.sh'
+    ]
+    
+    ext = os.path.splitext(file_path)[1].lower()
+    return ext in code_extensions
+
+def summarize_git_changes(changes):
+    """
+    Summarize the git changes using Hugging Face models
     
     Args:
         changes: Dictionary containing the changes
+        
+    Returns:
+        dict: Dictionary with summarized changes
+    """
+    if "error" in changes:
+        return changes
+        
+    summarized_changes = {
+        "modified": {},
+        "untracked": changes["untracked"],
+        "deleted": changes["deleted"]
+    }
+    
+    print("Initializing summarization model (this may take a moment on first run)...")
+    
+    # Summarize each modified file's diff
+    for file_path, diff in changes["modified"].items():
+        # Adjust parameters based on file type
+        if is_code_file(file_path):
+            # For code files, generate slightly longer summaries to preserve context
+            summary = huggingface_summarize(
+                diff, 
+                min_length=30, 
+                max_length=200,
+                min_input_length=200  # Only summarize longer code diffs
+            )
+        else:
+            # For text files, use standard summarization
+            summary = huggingface_summarize(
+                diff, 
+                min_length=20, 
+                max_length=150,
+                min_input_length=100
+            )
+        
+        summarized_changes["modified"][file_path] = summary
+    
+    return summarized_changes
+
+def display_summarized_changes(changes):
+    """
+    Display the summarized changes in a readable format
+    
+    Args:
+        changes: Dictionary containing the summarized changes
     """
     if "error" in changes:
         print(f"Error: {changes['error']}")
         return
         
-    print("\n===== UNCOMMITTED CHANGES =====\n")
+    print("\n===== SUMMARIZED UNCOMMITTED CHANGES =====\n")
     
     # Show modified files
     if changes["modified"]:
         print(f"\n----- MODIFIED/NEW FILES ({len(changes['modified'])}) -----")
-        for file_path, diff in changes["modified"].items():
+        for file_path, summary in changes["modified"].items():
             print(f"\nFile: {file_path}")
-            print(diff[:500] + "..." if len(diff) > 500 else diff)
+            print("-" * 40)
+            print(summary)
+            print("-" * 40)
     
     # Show untracked files
     if changes["untracked"]:
@@ -110,9 +266,11 @@ if __name__ == "__main__":
     # You can specify a different repository path if needed
     repo_path = '/home/vidhu-p/Desktop/coding/git-tracker'
     
+    # Get uncommitted changes
     changes = get_uncommitted_changes(repo_path)
-    display_changes(changes)
-
-    summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
-    summary = summarizer(changes, max_length=50, min_length=10, do_sample=False)
-    print(summary[0]['summary_text'])
+    
+    # Summarize the changes
+    summarized_changes = summarize_git_changes(changes)
+    
+    # Display the summarized changes
+    display_summarized_changes(summarized_changes)
