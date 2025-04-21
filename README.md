@@ -104,4 +104,4 @@ DO NOT include headers, timestamps, or introductory phrases."
 ```
 
 💡 **Pro Tip**: For large repositories, consider increasing `max_tokens` in the Bedrock invocation for more detailed summaries.
-```
+
