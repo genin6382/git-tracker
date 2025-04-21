@@ -43,3 +43,65 @@ You get a true history of all your meaningful contributions, regardless of wheth
    git clone https://github.com/genin6382/git-change-tracker.git
    cd git-change-tracker
    pip install -r requirements.txt
+
+3. **AWS Configuration**:
+   ```bash
+   aws configure
+   ```
+   Ensure your IAM user has `bedrock:InvokeModel` permissions.
+
+## 🚦 Usage
+
+```bash
+python main.py \
+  --source /path/to/source/repo \
+  --tracking /path/to/tracking/repo \
+  --interval 1800  # Check every 30 minutes
+```
+
+
+## ⚙️ Configuration
+
+| Parameter       | Description                          | Default |
+|-----------------|--------------------------------------|---------|
+| `--source`      | Path to source Git repository        | Required|
+| `--tracking`    | Path to tracking repository         | Required|
+| `--interval`    | Monitoring interval (seconds)        | 1800    |
+
+
+### 💰 Bedrock API Pricing (Claude 3 Haiku)
+
+| Type               | Unit Price (USD) | Unit Description                    | Est. Cost per 30-min Interval |
+|--------------------|------------------|--------------------------------------|-------------------------------|
+| **Input Tokens**   | $0.00025         | per 1,000 tokens sent in prompt      | ~$0.00025                     |
+| **Output Tokens**  | $0.00125         | per 1,000 tokens in model response   | ~$0.00125                     |
+| **Total per Call** | ~**$0.0015**     | input + output (avg. 1,000 tokens)   | **$0.0015**                   |
+
+
+## 📊 Sample Summary File
+
+```markdown
+# Change Summary - April 21, 2025 at 04:30 PM
+
+Source Repository: /projects/main-repo
+
+1. api_handler.py:
+   - Added JWT authentication middleware
+   - Fixed CORS policy configuration
+   - Optimized database connection pooling
+
+2. README.md:
+   - Updated installation instructions
+   - Added troubleshooting section
+```
+
+## 🤖 AI Prompt Engineering
+
+The system uses this optimized prompt with Claude 3 Haiku:
+```text
+"You are a technical assistant. Provide ONLY the summary of git changes in bullet points. 
+DO NOT include headers, timestamps, or introductory phrases."
+```
+
+💡 **Pro Tip**: For large repositories, consider increasing `max_tokens` in the Bedrock invocation for more detailed summaries.
+```
